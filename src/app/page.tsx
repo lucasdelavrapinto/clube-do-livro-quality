@@ -1,65 +1,117 @@
-import Image from "next/image";
+'use client';
+
+import { useEffect, useState } from 'react';
+import BookTable from '@/components/BookTable';
+import WithdrawModal from '@/components/WithdrawModal';
+import ReturnModal from '@/components/ReturnModal';
+import type { Book } from '@/lib/db';
 
 export default function Home() {
+  const [books, setBooks] = useState<Book[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [withdrawingBook, setWithdrawingBook] = useState<Book | null>(null);
+  const [returnOpen, setReturnOpen] = useState(false);
+
+  async function fetchBooks() {
+    try {
+      const res = await fetch('/api/books');
+      if (!res.ok) throw new Error(`Erro ${res.status}: ${res.statusText}`);
+      const data = await res.json();
+      setBooks(data);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao carregar livros.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { fetchBooks(); }, []);
+
+  async function handleReturn(bookId: number) {
+    await fetch('/api/devolucoes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ book_id: bookId }),
+    });
+    fetchBooks();
+  }
+
+  async function handleWithdraw(bookId: number, pessoa: string) {
+    await fetch('/api/retiradas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ book_id: bookId, pessoa }),
+    });
+    fetchBooks();
+  }
+
+  const available = books.filter((b) => b.status === 'disponível').length;
+  const unavailable = books.length - available;
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="flex-1 bg-white">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+        <div className="grid grid-cols-3 gap-4">
+          <StatCard label="Total" value={books.length} />
+          <StatCard label="Disponíveis" value={available} color="bg-green-50" textColor="text-green-700" />
+          <StatCard label="Indisponíveis" value={unavailable} color="bg-red-50" textColor="text-red-700" />
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+
+        <section className="bg-gray-50 rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100">
+            <h2 className="text-base font-semibold text-amber-900">Acervo</h2>
+          </div>
+          {loading ? (
+            <p className="text-center text-gray-400 py-12 text-sm">Carregando...</p>
+          ) : error ? (
+            <p className="text-center text-red-500 py-12 text-sm">{error}</p>
+          ) : (
+            <BookTable books={books} onWithdraw={setWithdrawingBook} />
+          )}
+        </section>
+      </div>
+
+      {/* Botão flutuante */}
+      <button
+        onClick={() => setReturnOpen(true)}
+        className="fixed bottom-6 right-6 flex items-center gap-2 rounded-full bg-blue-900 px-5 py-3 text-sm font-medium text-white shadow-lg hover:bg-blue-800 active:scale-95 transition-all"
+      >
+        <span className="text-base leading-none">↩</span>
+        Devolver livro
+      </button>
+
+      <WithdrawModal
+        book={withdrawingBook}
+        onConfirm={handleWithdraw}
+        onClose={() => setWithdrawingBook(null)}
+      />
+      <ReturnModal
+        open={returnOpen}
+        unavailableBooks={books.filter((b) => b.status === 'indisponível')}
+        onConfirm={handleReturn}
+        onClose={() => setReturnOpen(false)}
+      />
+    </main>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  color = 'bg-gray-50',
+  textColor = 'text-amber-900',
+}: {
+  label: string;
+  value: number;
+  color?: string;
+  textColor?: string;
+}) {
+  return (
+    <div className={`${color} rounded-2xl border border-gray-100 shadow-sm px-5 py-4`}>
+      <p className="text-sm text-gray-500">{label}</p>
+      <p className={`text-3xl font-bold mt-1 ${textColor}`}>{value}</p>
     </div>
   );
 }
