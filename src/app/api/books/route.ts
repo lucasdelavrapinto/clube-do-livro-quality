@@ -8,7 +8,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const { name, status, owner } = await req.json();
+  const { name, status, owner, descricao } = await req.json();
 
   if (!name?.trim() || !owner?.trim()) {
     return NextResponse.json({ error: 'Nome e proprietário são obrigatórios.' }, { status: 400 });
@@ -19,8 +19,8 @@ export async function POST(req: NextRequest) {
 
   const db = getDb();
   const result = db
-    .prepare('INSERT INTO books (name, status, owner) VALUES (?, ?, ?)')
-    .run(name.trim(), status, owner.trim());
+    .prepare('INSERT INTO books (name, status, owner, descricao) VALUES (?, ?, ?, ?)')
+    .run(name.trim(), status, owner.trim(), descricao?.trim() ?? '');
 
   const book = db.prepare('SELECT * FROM books WHERE id = ?').get(result.lastInsertRowid) as Book;
   return NextResponse.json(book, { status: 201 });

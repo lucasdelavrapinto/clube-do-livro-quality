@@ -4,13 +4,16 @@ import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import BookForm from '@/components/BookForm';
+import PasswordGate from '@/components/PasswordGate';
 import type { Book } from '@/lib/db';
 
 export default function CadastrarPage() {
   return (
-    <Suspense>
-      <CadastrarForm />
-    </Suspense>
+    <PasswordGate>
+      <Suspense>
+        <CadastrarForm />
+      </Suspense>
+    </PasswordGate>
   );
 }
 
@@ -33,7 +36,7 @@ function CadastrarForm() {
       });
   }, [editId]);
 
-  async function handleSubmit(data: { name: string; status: string; owner: string }) {
+  async function handleSubmit(data: { name: string; status: string; owner: string; descricao: string }) {
     if (editId) {
       await fetch(`/api/books/${editId}`, {
         method: 'PATCH',

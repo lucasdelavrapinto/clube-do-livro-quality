@@ -13,10 +13,10 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const { book_id, pessoa } = await req.json();
+  const { book_id, pessoa, telefone } = await req.json();
 
-  if (!book_id || !pessoa?.trim()) {
-    return NextResponse.json({ error: 'book_id e pessoa são obrigatórios.' }, { status: 400 });
+  if (!book_id || !pessoa?.trim() || !telefone?.trim()) {
+    return NextResponse.json({ error: 'book_id, pessoa e telefone são obrigatórios.' }, { status: 400 });
   }
 
   const db = getDb();
@@ -31,7 +31,8 @@ export async function POST(req: NextRequest) {
 
   const withdraw = db.transaction(() => {
     db.prepare('UPDATE books SET status = ? WHERE id = ?').run('indisponível', book_id);
-    const result = db.prepare('INSERT INTO retiradas (book_id, pessoa) VALUES (?, ?)').run(book_id, pessoa.trim());
+    const digits = telefone.replace(/\D/g, '');
+    const result = db.prepare('INSERT INTO retiradas (book_id, pessoa, telefone) VALUES (?, ?, ?)').run(book_id, pessoa.trim(), digits);
     return db.prepare('SELECT r.*, b.name AS book_name FROM retiradas r JOIN books b ON b.id = r.book_id WHERE r.id = ?').get(result.lastInsertRowid);
   });
 

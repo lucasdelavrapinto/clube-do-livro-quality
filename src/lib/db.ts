@@ -30,6 +30,14 @@ export function getDb(): Database.Database {
         devolvido_em TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
       );
     `);
+    const retiradaCols = db.prepare("PRAGMA table_info(retiradas)").all() as { name: string }[];
+    if (!retiradaCols.some((c) => c.name === 'telefone')) {
+      db.exec("ALTER TABLE retiradas ADD COLUMN telefone TEXT NOT NULL DEFAULT ''");
+    }
+    const bookCols = db.prepare("PRAGMA table_info(books)").all() as { name: string }[];
+    if (!bookCols.some((c) => c.name === 'descricao')) {
+      db.exec("ALTER TABLE books ADD COLUMN descricao TEXT NOT NULL DEFAULT ''");
+    }
   }
   return db;
 }
@@ -41,6 +49,7 @@ export interface Book {
   name: string;
   status: BookStatus;
   owner: string;
+  descricao: string;
   created_at: string;
 }
 
@@ -48,6 +57,7 @@ export interface Retirada {
   id: number;
   book_id: number;
   pessoa: string;
+  telefone: string;
   retirado_em: string;
   book_name?: string;
 }

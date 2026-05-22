@@ -14,6 +14,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const name = body.name?.trim() ?? existing.name;
   const status = body.status ?? existing.status;
   const owner = body.owner?.trim() ?? existing.owner;
+  const descricao = body.descricao !== undefined ? body.descricao.trim() : existing.descricao;
 
   if (!name || !owner) {
     return NextResponse.json({ error: 'Nome e proprietário são obrigatórios.' }, { status: 400 });
@@ -22,7 +23,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'Status inválido.' }, { status: 400 });
   }
 
-  db.prepare('UPDATE books SET name = ?, status = ?, owner = ? WHERE id = ?').run(name, status, owner, id);
+  db.prepare('UPDATE books SET name = ?, status = ?, owner = ?, descricao = ? WHERE id = ?').run(name, status, owner, descricao, id);
   const updated = db.prepare('SELECT * FROM books WHERE id = ?').get(id) as Book;
   return NextResponse.json(updated);
 }

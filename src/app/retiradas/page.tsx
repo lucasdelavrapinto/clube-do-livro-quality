@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { Retirada } from '@/lib/db';
+import PasswordGate from '@/components/PasswordGate';
 
 export default function RetiradasPage() {
   const [retiradas, setRetiradas] = useState<Retirada[]>([]);
@@ -14,6 +15,7 @@ export default function RetiradasPage() {
   }, []);
 
   return (
+    <PasswordGate>
     <main className="flex-1 bg-amber-50">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-6">
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-2">
@@ -36,6 +38,7 @@ export default function RetiradasPage() {
                   <tr>
                     <th className="px-6 py-3 font-medium">Livro</th>
                     <th className="px-6 py-3 font-medium">Pessoa</th>
+                    <th className="px-6 py-3 font-medium">Telefone</th>
                     <th className="px-6 py-3 font-medium">Retirado em</th>
                   </tr>
                 </thead>
@@ -44,6 +47,11 @@ export default function RetiradasPage() {
                     <tr key={r.id} className="hover:bg-amber-50/40 transition-colors">
                       <td className="px-6 py-4 font-medium text-gray-900">{r.book_name}</td>
                       <td className="px-6 py-4 text-gray-600">{r.pessoa}</td>
+                      <td className="px-6 py-4 text-gray-600">
+                        {r.telefone
+                          ? r.telefone.replace(/^(\d{2})(\d{5})(\d{4})$/, '($1) $2-$3')
+                          : '—'}
+                      </td>
                       <td className="px-6 py-4 text-gray-400">
                         {new Date(r.retirado_em).toLocaleString('pt-BR')}
                       </td>
@@ -56,6 +64,7 @@ export default function RetiradasPage() {
         </section>
       </div>
     </main>
+    </PasswordGate>
   );
 }
 

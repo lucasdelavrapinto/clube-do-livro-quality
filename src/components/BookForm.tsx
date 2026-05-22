@@ -5,7 +5,7 @@ import type { Book } from '@/lib/db';
 
 interface Props {
   initialData?: Book;
-  onSubmit: (data: { name: string; status: string; owner: string }) => Promise<void>;
+  onSubmit: (data: { name: string; status: string; owner: string; descricao: string }) => Promise<void>;
   onCancel?: () => void;
   submitLabel?: string;
 }
@@ -14,6 +14,7 @@ export default function BookForm({ initialData, onSubmit, onCancel, submitLabel 
   const [name, setName] = useState('');
   const [status, setStatus] = useState<'disponível' | 'indisponível'>('disponível');
   const [owner, setOwner] = useState('');
+  const [descricao, setDescricao] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -21,17 +22,19 @@ export default function BookForm({ initialData, onSubmit, onCancel, submitLabel 
       setName(initialData.name);
       setStatus(initialData.status);
       setOwner(initialData.owner);
+      setDescricao(initialData.descricao ?? '');
     } else {
       setName('');
       setStatus('disponível');
       setOwner('');
+      setDescricao('');
     }
   }, [initialData]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
-    await onSubmit({ name, status, owner });
+    await onSubmit({ name, status, owner, descricao });
     setSubmitting(false);
   }
 
@@ -47,7 +50,7 @@ export default function BookForm({ initialData, onSubmit, onCancel, submitLabel 
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Ex: Dom Casmurro"
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-black focus:outline-none focus:ring-2 focus:ring-amber-400"
           />
         </div>
         <div>
@@ -57,7 +60,7 @@ export default function BookForm({ initialData, onSubmit, onCancel, submitLabel 
             value={owner}
             onChange={(e) => setOwner(e.target.value)}
             placeholder="Ex: João Silva"
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-black focus:outline-none focus:ring-2 focus:ring-amber-400"
           />
         </div>
         <div>
@@ -65,12 +68,25 @@ export default function BookForm({ initialData, onSubmit, onCancel, submitLabel 
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value as 'disponível' | 'indisponível')}
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-black focus:outline-none focus:ring-2 focus:ring-amber-400"
           >
             <option value="disponível">Disponível</option>
             <option value="indisponível">Indisponível</option>
           </select>
         </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Descrição <span className="text-gray-400 font-normal">(opcional)</span>
+        </label>
+        <textarea
+          value={descricao}
+          onChange={(e) => setDescricao(e.target.value)}
+          placeholder="Breve sinopse ou observações sobre o livro..."
+          rows={3}
+          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-black focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
+        />
       </div>
 
       <div className="flex gap-3 pt-2">

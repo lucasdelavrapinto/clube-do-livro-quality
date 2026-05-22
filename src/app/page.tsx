@@ -11,7 +11,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [withdrawingBook, setWithdrawingBook] = useState<Book | null>(null);
-  const [returnOpen, setReturnOpen] = useState(false);
+const [returnOpen, setReturnOpen] = useState(false);
 
   async function fetchBooks() {
     try {
@@ -38,11 +38,11 @@ export default function Home() {
     fetchBooks();
   }
 
-  async function handleWithdraw(bookId: number, pessoa: string) {
+  async function handleWithdraw(bookId: number, pessoa: string, telefone: string) {
     await fetch('/api/retiradas', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ book_id: bookId, pessoa }),
+      body: JSON.stringify({ book_id: bookId, pessoa, telefone }),
     });
     fetchBooks();
   }
