@@ -29,7 +29,7 @@ npx tsc --noEmit  # type-check
 Crie um arquivo `.env.local` na raiz com a senha de administrador:
 
 ```env
-ADMIN_PASSWORD=SuaSenhaAqui
+NEXT_PUBLIC_ADMIN_PASSWORD=SuaSenhaAqui
 ```
 
 O banco SQLite é criado automaticamente em `data/books.db` na primeira execução.
@@ -75,7 +75,7 @@ cd C:\apps\clube_livro
 Crie o arquivo `C:\apps\clube_livro\.env.local`:
 
 ```env
-ADMIN_PASSWORD=SuaSenhaAqui
+NEXT_PUBLIC_ADMIN_PASSWORD=SuaSenhaAqui
 ```
 
 > **Importante:** este arquivo não está no repositório (é ignorado pelo `.gitignore`).  
