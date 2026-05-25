@@ -1,20 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb, type Book } from '@/lib/db';
+import { supabase, type Book } from '@/lib/db';
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await req.json();
-  const db = getDb();
 
-  const existing = db.prepare('SELECT * FROM books WHERE id = ?').get(id) as Book | undefined;
-  if (!existing) {
+  const { data: existing, error: fetchError } = await supabase
+    .from('books')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (fetchError || !existing) {
     return NextResponse.json({ error: 'Livro não encontrado.' }, { status: 404 });
   }
 
-  const name = body.name?.trim() ?? existing.name;
-  const status = body.status ?? existing.status;
-  const owner = body.owner?.trim() ?? existing.owner;
-  const descricao = body.descricao !== undefined ? body.descricao.trim() : existing.descricao;
+  const book = existing as Book;
+  const name = body.name?.trim() ?? book.name;
+  const status = body.status ?? book.status;
+  const owner = body.owner?.trim() ?? book.owner;
+  const descricao = body.descricao !== undefined ? body.descricao.trim() : book.descricao;
 
   if (!name || !owner) {
     return NextResponse.json({ error: 'Nome e proprietário são obrigatórios.' }, { status: 400 });
@@ -23,17 +28,26 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'Status inválido.' }, { status: 400 });
   }
 
-  db.prepare('UPDATE books SET name = ?, status = ?, owner = ?, descricao = ? WHERE id = ?').run(name, status, owner, descricao, id);
-  const updated = db.prepare('SELECT * FROM books WHERE id = ?').get(id) as Book;
-  return NextResponse.json(updated);
+  const { data, error } = await supabase
+    .from('books')
+    .update({ name, status, owner, descricao })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data as Book);
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const db = getDb();
-  const result = db.prepare('DELETE FROM books WHERE id = ?').run(id);
-  if (result.changes === 0) {
-    return NextResponse.json({ error: 'Livro não encontrado.' }, { status: 404 });
-  }
+
+  const { error, count } = await supabase
+    .from('books')
+    .delete({ count: 'exact' })
+    .eq('id', id);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (count === 0) return NextResponse.json({ error: 'Livro não encontrado.' }, { status: 404 });
   return new NextResponse(null, { status: 204 });
 }

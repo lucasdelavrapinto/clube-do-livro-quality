@@ -14,7 +14,7 @@ export default function DevolucoesPage() {
   }, []);
 
   return (
-    <main className="flex-1 bg-white">
+    <main className="flex-1 bg-gray-100">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-6">
         <div className="grid grid-cols-2 gap-4 sm:w-1/3">
           <div className="bg-gray-50 rounded-2xl border border-gray-100 shadow-sm px-5 py-4">

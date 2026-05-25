@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb, type Book } from '@/lib/db';
+import { supabase, type Book } from '@/lib/db';
 
 export async function GET() {
-  const db = getDb();
-  const books = db.prepare('SELECT * FROM books ORDER BY created_at DESC').all() as Book[];
-  return NextResponse.json(books);
+  const { data, error } = await supabase
+    .from('books')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data as Book[]);
 }
 
 export async function POST(req: NextRequest) {
@@ -17,11 +21,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Status inválido.' }, { status: 400 });
   }
 
-  const db = getDb();
-  const result = db
-    .prepare('INSERT INTO books (name, status, owner, descricao) VALUES (?, ?, ?, ?)')
-    .run(name.trim(), status, owner.trim(), descricao?.trim() ?? '');
+  const { data, error } = await supabase
+    .from('books')
+    .insert({ name: name.trim(), status, owner: owner.trim(), descricao: descricao?.trim() ?? '' })
+    .select()
+    .single();
 
-  const book = db.prepare('SELECT * FROM books WHERE id = ?').get(result.lastInsertRowid) as Book;
-  return NextResponse.json(book, { status: 201 });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data as Book, { status: 201 });
 }

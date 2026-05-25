@@ -5,12 +5,12 @@ import type { Book } from '@/lib/db';
 
 interface Props {
   open: boolean;
-  unavailableBooks: Book[];
+  myBorrowedBooks: Book[];
   onConfirm: (bookId: number) => Promise<void>;
   onClose: () => void;
 }
 
-export default function ReturnModal({ open, unavailableBooks, onConfirm, onClose }: Props) {
+export default function ReturnModal({ open, myBorrowedBooks, onConfirm, onClose }: Props) {
   const [selectedId, setSelectedId] = useState<number | ''>('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -36,10 +36,12 @@ export default function ReturnModal({ open, unavailableBooks, onConfirm, onClose
     >
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
         <h3 className="text-base font-semibold text-gray-900 mb-1">Devolver livro</h3>
-        <p className="text-sm text-gray-500 mb-4">Selecione o livro que está sendo devolvido.</p>
+        <p className="text-sm text-gray-500 mb-4">Selecione o livro que você deseja devolver.</p>
 
-        {unavailableBooks.length === 0 ? (
-          <p className="text-sm text-gray-400 py-4 text-center">Nenhum livro retirado no momento.</p>
+        {myBorrowedBooks.length === 0 ? (
+          <p className="text-sm text-gray-400 py-4 text-center">
+            Você não possui nenhum livro retirado.
+          </p>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -51,7 +53,7 @@ export default function ReturnModal({ open, unavailableBooks, onConfirm, onClose
                 className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-black focus:outline-none focus:ring-2 focus:ring-blue-400"
               >
                 <option value="">Selecione...</option>
-                {unavailableBooks.map((b) => (
+                {myBorrowedBooks.map((b) => (
                   <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
               </select>

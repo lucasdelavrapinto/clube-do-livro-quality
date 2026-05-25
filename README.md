@@ -1,18 +1,22 @@
 # Clube do Livro
 
-Aplicação web para gestão do acervo e retiradas de um clube do livro.  
-Stack: **Next.js 16 · TypeScript · Tailwind CSS v4 · SQLite (better-sqlite3)**
+Aplicação web para gestão do acervo e empréstimos de um clube do livro.  
+Membros fazem login, retiram e devolvem livros, e recebem notificações via WhatsApp.
+
+**Stack:** Next.js 16 · TypeScript · Tailwind CSS v4 · Supabase (Auth + PostgreSQL) · ZAPI (WhatsApp)
 
 ---
 
-## Rotas
+## Funcionalidades
 
-| Rota | Descrição | Protegida por senha |
-|---|---|---|
-| `/` | Acervo, retirada e devolução de livros | Não |
-| `/cadastrar` | Cadastrar ou editar livro | Sim |
-| `/retiradas` | Histórico de retiradas | Sim |
-| `/excluir` | Excluir livro do acervo | Sim (no momento da exclusão) |
+- Catálogo de livros com pesquisa em tempo real por título
+- Retirada e devolução de livros vinculadas ao usuário autenticado
+- Notificação automática via WhatsApp ao retirar um livro
+- Autenticação por email e senha (Supabase Auth) com sessão de 5 dias
+- Cadastro com nome completo e telefone (validação de número brasileiro)
+- Edição de perfil (nome e telefone)
+- Histórico completo de retiradas e devoluções
+- Cadastro, edição e exclusão de livros (com confirmação por senha)
 
 ---
 
@@ -26,221 +30,99 @@ npm run lint      # ESLint
 npx tsc --noEmit  # type-check
 ```
 
-Crie um arquivo `.env.local` na raiz com a senha de administrador:
+---
+
+## Variáveis de ambiente
+
+Crie `.env.local` na raiz (use `.env.example` como referência):
 
 ```env
-NEXT_PUBLIC_ADMIN_PASSWORD=SuaSenhaAqui
-```
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=https://SEU_PROJETO.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=sua_anon_key        # "anon public" no dashboard
+SUPABASE_SERVICE_ROLE_KEY=sua_service_role_key    # "service_role" — nunca exponha
 
-O banco SQLite é criado automaticamente em `data/books.db` na primeira execução.
+# Senha de confirmação para exclusão de livros
+ADMIN_PASSWORD=troque-aqui
+
+# ZAPI — notificações WhatsApp (https://z-api.io)
+ZAPI_API=https://api.z-api.io/instances/SUA_INSTANCIA/token/SEU_TOKEN/send-text
+ZAPI_CLIENT_TOKEN=seu_client_token
+```
 
 ---
 
-## Deploy em servidor Windows
+## Configuração do Supabase
 
-### Pré-requisitos
+### 1. Criar as tabelas
 
-Instale os programas abaixo no servidor Windows:
+Execute no **SQL Editor** do Supabase:
 
-| Programa | Link | Observação |
+```sql
+CREATE TABLE books (
+  id        BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  name      TEXT NOT NULL,
+  status    TEXT NOT NULL DEFAULT 'disponível',
+  owner     TEXT NOT NULL,
+  descricao TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE retiradas (
+  id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  book_id     BIGINT NOT NULL REFERENCES books(id),
+  user_id     UUID REFERENCES auth.users(id),
+  pessoa      TEXT NOT NULL,
+  telefone    TEXT NOT NULL DEFAULT '',
+  retirado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE devolucoes (
+  id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  book_id      BIGINT NOT NULL REFERENCES books(id),
+  devolvido_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+### 2. Configurar autenticação
+
+Em **Authentication → Providers → Email**:
+- Desmarque **"Confirm email"** para login automático após cadastro
+
+Em **Authentication → URL Configuration**, adicione o redirect URL:
+```
+http://localhost:3000/api/auth/callback
+```
+Adicione também o domínio de produção ao fazer deploy.
+
+---
+
+## Rotas
+
+| Rota | Acesso | Descrição |
 |---|---|---|
-| **Node.js LTS** | https://nodejs.org | Versão 20 ou superior |
-| **Git** | https://git-scm.com | Para clonar o repositório |
-| **Nginx para Windows** | https://nginx.org/en/download.html | Reverse proxy |
-| **PM2** | via npm (ver abaixo) | Gerenciador de processos |
-
-Após instalar o Node.js, instale o PM2 globalmente:
-
-```powershell
-npm install -g pm2
-npm install -g pm2-startup
-```
+| `/login` | Público | Login com email e senha |
+| `/cadastro` | Público | Criar conta (nome, telefone, email, senha) |
+| `/` | Autenticado | Acervo com busca, retirada e devolução |
+| `/perfil` | Autenticado | Editar nome e telefone |
+| `/cadastrar` | Autenticado | Cadastrar novo livro ou editar existente (`?id=X`) |
+| `/retiradas` | Autenticado | Histórico de retiradas |
+| `/devolucoes` | Autenticado | Histórico de devoluções |
+| `/excluir` | Autenticado | Excluir livro (requer senha de confirmação) |
 
 ---
 
-### 1. Copiar os arquivos para o servidor
+## Regras de negócio
 
-Clone o repositório (ou copie os arquivos manualmente) para uma pasta do servidor.  
-Sugestão de caminho: `C:\apps\clube_livro`
-
-```powershell
-git clone <url-do-repositorio> C:\apps\clube_livro
-cd C:\apps\clube_livro
-```
+- Apenas o usuário que retirou um livro pode devolvê-lo
+- Ao retirar um livro, o membro recebe uma mensagem WhatsApp de confirmação
+- O telefone cadastrado deve ser um número brasileiro válido (DDD + número)
+- A exclusão de livros requer a senha `ADMIN_PASSWORD` como confirmação adicional
 
 ---
 
-### 2. Configurar variáveis de ambiente
+## Deploy
 
-Crie o arquivo `C:\apps\clube_livro\.env.local`:
+A aplicação é compatível com qualquer plataforma que suporte Next.js (Vercel, Railway, etc.).
 
-```env
-NEXT_PUBLIC_ADMIN_PASSWORD=SuaSenhaAqui
-```
-
-> **Importante:** este arquivo não está no repositório (é ignorado pelo `.gitignore`).  
-> Guarde a senha em local seguro.
-
----
-
-### 3. Instalar dependências e fazer o build
-
-```powershell
-cd C:\apps\clube_livro
-npm install
-npm run build
-```
-
----
-
-### 4. Criar a pasta do banco de dados
-
-O SQLite precisa que a pasta `data\` exista antes da primeira execução:
-
-```powershell
-mkdir C:\apps\clube_livro\data
-```
-
----
-
-### 5. Iniciar a aplicação com PM2
-
-```powershell
-cd C:\apps\clube_livro
-pm2 start npm --name "clube-livro" -- start
-pm2 save
-```
-
-Verifique se está rodando:
-
-```powershell
-pm2 status
-pm2 logs clube-livro
-```
-
-A aplicação estará disponível em `http://localhost:3000`.
-
----
-
-### 6. Configurar inicialização automática no boot do Windows
-
-```powershell
-pm2-startup install
-```
-
-Siga as instruções exibidas no terminal. Isso configura o PM2 como serviço do Windows via Task Scheduler, garantindo que a aplicação reinicie automaticamente após reinicialização do servidor.
-
----
-
-### 7. Configurar o Nginx como reverse proxy
-
-Extraia o Nginx para `C:\nginx`. Substitua o conteúdo de `C:\nginx\conf\nginx.conf`:
-
-```nginx
-worker_processes 1;
-
-events {
-    worker_connections 1024;
-}
-
-http {
-    include       mime.types;
-    default_type  application/octet-stream;
-    sendfile      on;
-    keepalive_timeout 65;
-
-    # Redireciona HTTP → HTTPS
-    server {
-        listen 80;
-        server_name seusubdominio.com;
-        return 301 https://$host$request_uri;
-    }
-
-    server {
-        listen 443 ssl;
-        server_name seusubdominio.com;
-
-        ssl_certificate     C:/nginx/ssl/cert.pem;
-        ssl_certificate_key C:/nginx/ssl/key.pem;
-
-        location / {
-            proxy_pass         http://127.0.0.1:3000;
-            proxy_http_version 1.1;
-            proxy_set_header   Upgrade $http_upgrade;
-            proxy_set_header   Connection 'upgrade';
-            proxy_set_header   Host $host;
-            proxy_cache_bypass $http_upgrade;
-        }
-    }
-}
-```
-
-> Substitua `seusubdominio.com` pelo seu subdomínio real.
-
-Inicie o Nginx:
-
-```powershell
-cd C:\nginx
-start nginx
-```
-
-Para que o Nginx inicie automaticamente com o Windows, adicione-o como tarefa agendada ou use o [NSSM](https://nssm.cc) para registrá-lo como serviço.
-
----
-
-### 8. Certificado SSL (HTTPS)
-
-Use o **win-acme** para obter um certificado gratuito via Let's Encrypt:
-
-1. Baixe em: https://www.win-acme.com
-2. Execute `wacs.exe` como administrador
-3. Escolha o domínio e siga o assistente
-4. Aponte os caminhos do certificado gerado para `ssl_certificate` e `ssl_certificate_key` no `nginx.conf`
-
-> O win-acme renova o certificado automaticamente a cada 60 dias.
-
----
-
-### 9. Liberar portas no Firewall do Windows
-
-Abra o PowerShell como administrador:
-
-```powershell
-New-NetFirewallRule -DisplayName "HTTP"  -Direction Inbound -Protocol TCP -LocalPort 80  -Action Allow
-New-NetFirewallRule -DisplayName "HTTPS" -Direction Inbound -Protocol TCP -LocalPort 443 -Action Allow
-```
-
----
-
-### Arquitetura em produção
-
-```
-Internet → porta 443 (HTTPS)
-    └── Nginx (reverse proxy + SSL)
-            └── localhost:3000 (Next.js via PM2)
-                    └── data/books.db (SQLite)
-```
-
----
-
-### Comandos úteis no servidor
-
-```powershell
-pm2 status                  # status da aplicação
-pm2 logs clube-livro        # logs em tempo real
-pm2 restart clube-livro     # reiniciar após atualização
-pm2 stop clube-livro        # parar
-
-nginx -s reload             # recarregar config do Nginx sem derrubar
-nginx -s stop               # parar o Nginx
-```
-
-### Atualizar a aplicação
-
-```powershell
-cd C:\apps\clube_livro
-git pull
-npm install
-npm run build
-pm2 restart clube-livro
-```
+Configure as variáveis de ambiente da seção acima na plataforma escolhida e adicione a URL de produção em **Supabase → Authentication → URL Configuration**.

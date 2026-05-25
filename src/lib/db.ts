@@ -1,46 +1,13 @@
-import Database from 'better-sqlite3';
-import path from 'path';
+import { createClient } from '@supabase/supabase-js';
 
-const DB_PATH = path.join(process.cwd(), 'data', 'books.db');
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-let db: Database.Database;
-
-export function getDb(): Database.Database {
-  if (!db) {
-    const { mkdirSync } = require('fs');
-    mkdirSync(path.dirname(DB_PATH), { recursive: true });
-    db = new Database(DB_PATH);
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS books (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'disponível',
-        owner TEXT NOT NULL,
-        created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
-      );
-      CREATE TABLE IF NOT EXISTS retiradas (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        book_id INTEGER NOT NULL REFERENCES books(id),
-        pessoa TEXT NOT NULL,
-        retirado_em TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
-      );
-      CREATE TABLE IF NOT EXISTS devolucoes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        book_id INTEGER NOT NULL REFERENCES books(id),
-        devolvido_em TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
-      );
-    `);
-    const retiradaCols = db.prepare("PRAGMA table_info(retiradas)").all() as { name: string }[];
-    if (!retiradaCols.some((c) => c.name === 'telefone')) {
-      db.exec("ALTER TABLE retiradas ADD COLUMN telefone TEXT NOT NULL DEFAULT ''");
-    }
-    const bookCols = db.prepare("PRAGMA table_info(books)").all() as { name: string }[];
-    if (!bookCols.some((c) => c.name === 'descricao')) {
-      db.exec("ALTER TABLE books ADD COLUMN descricao TEXT NOT NULL DEFAULT ''");
-    }
-  }
-  return db;
+if (!supabaseUrl || !supabaseKey) {
+  throw new Error('NEXT_PUBLIC_SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY devem estar definidos no .env');
 }
+
+export const supabase = createClient(supabaseUrl, supabaseKey);
 
 export type BookStatus = 'disponível' | 'indisponível';
 
@@ -56,6 +23,7 @@ export interface Book {
 export interface Retirada {
   id: number;
   book_id: number;
+  user_id?: string;
   pessoa: string;
   telefone: string;
   retirado_em: string;
@@ -67,4 +35,12 @@ export interface Devolucao {
   book_id: number;
   devolvido_em: string;
   book_name?: string;
+}
+
+export interface Sugestao {
+  id: number;
+  user_id?: string;
+  pessoa: string;
+  livro: string;
+  sugerido_em: string;
 }

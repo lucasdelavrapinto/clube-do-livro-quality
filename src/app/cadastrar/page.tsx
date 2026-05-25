@@ -4,16 +4,13 @@ import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import BookForm from '@/components/BookForm';
-import PasswordGate from '@/components/PasswordGate';
 import type { Book } from '@/lib/db';
 
 export default function CadastrarPage() {
   return (
-    <PasswordGate>
-      <Suspense>
-        <CadastrarForm />
-      </Suspense>
-    </PasswordGate>
+    <Suspense>
+      <CadastrarForm />
+    </Suspense>
   );
 }
 
@@ -56,7 +53,7 @@ function CadastrarForm() {
   const isEditing = !!editId;
 
   return (
-    <main className="flex-1 bg-amber-50">
+    <main className="flex-1 bg-gray-100">
       <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8">
         <div className="mb-6">
           <h2 className="text-xl font-bold text-amber-900">

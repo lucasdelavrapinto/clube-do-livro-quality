@@ -22,7 +22,6 @@ export default function BookTable({ books, onWithdraw }: Props) {
         <thead className="bg-gray-100 text-gray-600 text-left">
           <tr>
             <th className="px-6 py-3 font-medium">Livro</th>
-            <th className="px-6 py-3 font-medium">Proprietário</th>
             <th className="px-6 py-3 font-medium">Status</th>
             {onWithdraw && <th className="px-6 py-3 font-medium sr-only">Ação</th>}
           </tr>
@@ -31,7 +30,6 @@ export default function BookTable({ books, onWithdraw }: Props) {
           {books.map((book) => (
             <tr key={book.id} className="hover:bg-amber-50/40 transition-colors">
               <td className="px-6 py-4 font-medium text-gray-900">{book.name}</td>
-              <td className="px-6 py-4 text-gray-600">{book.owner}</td>
               <td className="px-6 py-4">
                 <StatusBadge status={book.status} />
               </td>

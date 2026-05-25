@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import type { Retirada } from '@/lib/db';
-import PasswordGate from '@/components/PasswordGate';
 
 export default function RetiradasPage() {
   const [retiradas, setRetiradas] = useState<Retirada[]>([]);
@@ -15,8 +14,7 @@ export default function RetiradasPage() {
   }, []);
 
   return (
-    <PasswordGate>
-    <main className="flex-1 bg-amber-50">
+    <main className="flex-1 bg-gray-100">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-6">
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-2">
           <StatCard label="Total de retiradas" value={retiradas.length} />
@@ -64,7 +62,6 @@ export default function RetiradasPage() {
         </section>
       </div>
     </main>
-    </PasswordGate>
   );
 }
 
