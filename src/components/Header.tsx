@@ -2,45 +2,66 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { createSupabaseBrowserClient } from '@/lib/supabase-browser';
+import { useSessao } from '@/components/SessaoProvider';
 
 export default function Header() {
   const pathname = usePathname();
   const router = useRouter();
+  const { usuario, carregando, sair } = useSessao();
 
-  const isAuthPage = pathname === '/login' || pathname === '/cadastro';
+  const emTelaDeAuth = pathname === '/login' || pathname === '/cadastro';
 
-  async function handleLogout() {
-    const supabase = createSupabaseBrowserClient();
-    await supabase.auth.signOut();
-    router.push('/login');
+  async function handleSair() {
+    await sair();
+    router.push('/');
+    router.refresh();
   }
 
   return (
     <header className="bg-blue-950 text-white shadow-md">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6">
-        <div className="flex items-center justify-between py-4">
-          <Link href={isAuthPage ? '/login' : '/'} className="group">
-            <h1 className="text-xl font-bold tracking-tight group-hover:text-amber-200 transition-colors">
-              Clube do Livro
+      <div className="mx-auto max-w-5xl px-4 sm:px-6">
+        <div className="flex items-center justify-between gap-4 py-4">
+          <div className="min-w-0">
+            <h1 className="truncate text-lg font-bold tracking-tight sm:text-xl">
+              Clube do Livro - Grupo Quality
             </h1>
-            <p className="text-blue-300 text-xs mt-0.5">Gerenciamento do acervo</p>
-          </Link>
+          </div>
 
-          {!isAuthPage && (
-            <nav className="flex items-center gap-1">
-              <NavLink href="/" active={pathname === '/'}>
-                Acervo
-              </NavLink>
-              <NavLink href="/perfil" active={pathname === '/perfil'}>
-                Meu perfil
-              </NavLink>
-              <button
-                onClick={handleLogout}
-                className="px-4 py-2 rounded-lg text-sm font-medium text-blue-200 hover:bg-blue-800/60 hover:text-white transition-colors"
-              >
-                Sair
-              </button>
+          {/* Enquanto a sessão não foi lida não mostramos nada, para não piscar
+              "Login" na cara de quem já está logado. */}
+          {!carregando && (
+            <nav className="flex shrink-0 items-center gap-3 text-sm">
+              {usuario ? (
+                <>
+                  <span className="hidden text-blue-200 sm:inline">
+                    Olá, <strong className="font-medium text-white">{primeiroNome(usuario.name)}</strong>
+                  </span>
+                  <button
+                    onClick={handleSair}
+                    className="rounded-lg px-3 py-1.5 font-medium text-blue-200 transition-colors hover:bg-blue-800/60 hover:text-white"
+                  >
+                    Sair
+                  </button>
+                </>
+              ) : (
+                !emTelaDeAuth && (
+                  <span className="flex items-center gap-1 text-blue-200">
+                    <Link
+                      href="/login"
+                      className="rounded-lg px-2 py-1.5 font-medium transition-colors hover:bg-blue-800/60 hover:text-white"
+                    >
+                      Login
+                    </Link>
+                    <span aria-hidden className="text-blue-400">/</span>
+                    <Link
+                      href="/cadastro"
+                      className="rounded-lg px-2 py-1.5 font-medium transition-colors hover:bg-blue-800/60 hover:text-white"
+                    >
+                      Cadastrar
+                    </Link>
+                  </span>
+                )
+              )}
             </nav>
           )}
         </div>
@@ -49,17 +70,7 @@ export default function Header() {
   );
 }
 
-function NavLink({ href, active, children }: { href: string; active: boolean; children: React.ReactNode }) {
-  return (
-    <Link
-      href={href}
-      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-        active
-          ? 'bg-blue-800 text-white'
-          : 'text-blue-200 hover:bg-blue-800/60 hover:text-white'
-      }`}
-    >
-      {children}
-    </Link>
-  );
+/** O nome completo estoura o cabeçalho no celular; o primeiro já identifica. */
+function primeiroNome(nome: string): string {
+  return nome.trim().split(/\s+/)[0] || nome;
 }

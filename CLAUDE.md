@@ -15,139 +15,219 @@ No test suite is configured.
 
 ## Architecture
 
-**Stack:** Next.js 16 App Router · TypeScript · Tailwind CSS v4 · Supabase (PostgreSQL) · Supabase Auth · ZAPI (WhatsApp)
+**Stack:** Next.js 16 App Router · TypeScript · Tailwind CSS v4
+
+The catalogue is **read-only and public**. Accounts (login/registration) are wired to the
+Laravel API's Sanctum endpoints. The withdrawal ("retirada") action is the one piece still
+without a backend — see *Authentication* below.
+
+---
+
+### Data source
+
+The catalogue is owned by a separate Laravel app (`Sistema-Quality`, a sibling repo at
+`../Sistema-Quality`). This project only reads from it.
+
+`GET /api/livros` on the Laravel side is public and accepts optional `search`,
+`categoria`, `per_page` and `page`. It responds:
+
+```jsonc
+{
+  "data": [
+    {
+      "id": 4,
+      "titulo": "Pai Rico Pai Pobre",
+      "escritor": "Robert Kiyosaki",
+      "categoria": "Finanças",       // nullable
+      "disponibilizado_por": "Lucas Pinto",
+      "resumo": "...",               // nullable
+      "imagem_url": "http://.../storage/livros/....jpg",  // nullable
+      "cadastrado_por": "Lucas Pinto",
+      "created_at": "2026-08-20T14:46:06.000000Z"
+    }
+  ],
+  "meta": { "total": 2 },
+  "error": null
+}
+```
+
+There is **no status field** — the upstream API has no concept of a book being
+withdrawn, so every book it returns is presented as available.
 
 ---
 
 ### Environment variables
 
-Defined in `.env.local` (use `.env.example` as reference):
+Defined in `.env.local` (see `.env.example`):
 
 | Variable | Side | Purpose |
 |---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | public | Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | public | Supabase anon key (browser auth client) |
-| `SUPABASE_SERVICE_ROLE_KEY` | server-only | Service role key — bypasses RLS; used in all API routes |
-| `ADMIN_PASSWORD` | server-only | Password for the book-deletion confirmation modal only |
-| `ZAPI_API` | server-only | Full ZAPI endpoint URL for WhatsApp messages |
-| `ZAPI_CLIENT_TOKEN` | server-only | ZAPI `Client-Token` request header value |
+| `LIVROS_API_URL` | server-only | Full URL of the Laravel catalogue endpoint. Defaults to `http://127.0.0.1:8001/api/livros` |
+| `API_V1_URL` | server-only | Base of the Laravel v1 routes (auth + retirada). Defaults to `http://127.0.0.1:8001/api/v1` |
+
+> Deploying requires setting `LIVROS_API_URL` on the host. Without it the app falls
+> back to `127.0.0.1:8001`, which does not exist in production.
+
+---
+
+### Files
+
+| File | Purpose |
+|---|---|
+| `src/app/layout.tsx` | Root layout; renders `<Header>` globally |
+| `src/app/page.tsx` | The only page — the acervo. Client component: fetches `/api/livros`, filters, opens the detail modal |
+| `src/app/api/livros/route.ts` | Server-side proxy to the Laravel API |
+| `src/lib/livros.ts` | `Livro`/`LivrosResponse` types + `normalizar()` |
+| `src/components/AcervoGrid.tsx` | Cover-card grid; also exports `Capa` |
+| `src/components/LivroModal.tsx` | Book detail dialog |
+| `src/components/Header.tsx` | Auth-aware header: greets the signed-in user + "Sair", or "Login / Cadastrar" |
+| `src/lib/auth.ts` | Auth types, error-envelope parsing, and the still-stubbed `retirarLivro()` |
+| `src/lib/auth-server.ts` | Server-side auth proxy: talks to Laravel, manages the httpOnly cookie |
+| `src/components/SessaoProvider.tsx` | Session context — `useSessao()` / `useUsuario()`. Mounted in the root layout |
+| `src/lib/telefone.ts` | Brazilian phone mask + DDD/mobile validation |
+| `src/app/login/page.tsx` | Email + password form. Honours `?next=` (internal paths only) |
+| `src/app/cadastro/page.tsx` | Registration form (nome, telefone, email, senha) |
+
+#### Why the proxy route exists
+
+`src/app/api/livros/route.ts` is a thin passthrough, but it earns its place: the browser
+never talks to the Laravel host directly, which avoids CORS and mixed-content problems,
+and keeps `LIVROS_API_URL` (which differs per environment) out of the client bundle. It
+forwards `search`/`categoria`/`per_page`/`page`, caches the upstream response for 60s,
+and converts any upstream failure into `{ data: [], meta: { total: 0 }, error: "..." }`
+with status 502, so the page always has a shape it can render.
+
+#### Search
+
+Filtering happens client-side over the already-loaded list, across título, escritor,
+categoria and disponibilizado_por. `normalizar()` strips diacritics so `financas`
+matches `Finanças`. The proxy also forwards `?search=` upstream, which is unused by
+the UI today but available if the catalogue grows enough to need server-side paging.
+
+#### Covers
+
+`imagem_url` is rendered with a plain `<img>`, not `next/image`, because the image host
+comes from the API and changes per environment. `Capa` falls back to the title's first
+letter when the URL is missing or the image fails to load.
 
 ---
 
 ### Authentication
 
-Auth is handled by **Supabase Auth** (email + password). No custom session logic.
+Login and registration are **live** against `Sistema-Quality`'s Sanctum endpoints. The
+browser never sees the token: four Next route handlers proxy to Laravel and keep the
+token in an `httpOnly` cookie named `clube_token`.
 
-- **`src/lib/supabase-browser.ts`** — `createSupabaseBrowserClient()` using the anon key; used in client components for login, signup, logout, and profile updates.
-- **`src/lib/supabase-server.ts`** — `getSessionUser()` reads the session from request cookies; used in API routes that need the authenticated user's identity.
-- **`src/proxy.ts`** — Next.js 16 proxy (replaces middleware); refreshes the session on every request, sets cookie `maxAge` to 5 days, and redirects unauthenticated users to `/login`. Matcher excludes `/api/*`.
-- **`src/app/api/auth/callback/route.ts`** — exchanges the email-confirmation code for a session (needed if Supabase email confirmation is enabled).
+| Next route | Proxies to | Notes |
+|---|---|---|
+| `POST /api/auth/register` | `POST /api/v1/auth/register` | Server assigns the `LIVROS` role |
+| `POST /api/auth/login` | `POST /api/v1/auth/login` | Accepts `MOTORISTA` or `LIVROS` |
+| `GET /api/auth/me` | `GET /api/v1/auth/me` | Returns `data: null` when signed out |
+| `POST /api/auth/logout` | `POST /api/v1/auth/logout` | Revokes the token, clears the cookie |
+| `POST /api/retiradas` | `POST /api/v1/livros/{id}/retirada` | Body `{ livro_id }`; 409 `LIVRO_INDISPONIVEL` |
+| `POST /api/devolucoes` | `POST /api/v1/livros/{id}/devolucao` | Body `{ livro_id }`; 409 `RETIRADA_NAO_ENCONTRADA` |
+| `GET /api/minhas-retiradas` | `GET /api/v1/minhas-retiradas` | Empty list when signed out — no upstream call |
 
-User metadata stored on signup (via `options.data`):
-- `full_name` — user's full name
-- `telefone` — digits-only phone number (`phone` is a reserved Supabase Auth field and will be ignored)
+`SessaoProvider` reads `/api/auth/me` once for the whole app; components call
+`useUsuario()` or `useSessao()`. Validation errors from Laravel pass through untouched,
+so `error.fields` is available to highlight the offending input.
 
----
+**Field names on the wire are Laravel's** (`name`, `email`, `phone`, `password`,
+`password_confirmation`), while the forms use Portuguese state (`nome`, `telefone`,
+`senha`). The mapping happens in `SessaoProvider`.
 
-### Database
+Two constraints worth remembering:
 
-**`src/lib/db.ts`** exports the Supabase service-role client (`supabase`) and all types. RLS is bypassed — access control is enforced in each API route.
+- **Passwords must be at least 8 characters.** The server uses `Rules\Password::defaults()`,
+  which is Laravel's `min(8)`. The cadastro form validates the same number — keep them in
+  sync if the server rule changes.
+- **Phone is sent as typed.** The server strips non-digits before validating, so the mask
+  `(11) 91234-5678` is accepted; the column is `string('phone', 11)`.
 
-#### Schema
+#### Withdrawals
 
-```sql
-CREATE TABLE books (
-  id        BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  name      TEXT NOT NULL,
-  status    TEXT NOT NULL DEFAULT 'disponível',
-  owner     TEXT NOT NULL,
-  descricao TEXT NOT NULL DEFAULT '',
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+`POST /api/retiradas` takes `{ livro_id }`, validates it is a positive integer (it is
+interpolated into the upstream URL), attaches the Bearer token from the cookie, and calls
+`POST /api/v1/livros/{id}/retirada` with an empty body. Upstream statuses pass through —
+notably **409 `LIVRO_INDISPONIVEL`** when someone else got there first. Laravel wraps the
+whole thing in a transaction with `lockForUpdate()`, so concurrent retiradas are safe.
 
-CREATE TABLE retiradas (
-  id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  book_id     BIGINT NOT NULL REFERENCES books(id),
-  user_id     UUID REFERENCES auth.users(id),
-  pessoa      TEXT NOT NULL,
-  telefone    TEXT NOT NULL DEFAULT '',
-  retirado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+**One book per person.** `LivroController::LIMITE_POR_PESSOA` (currently `1`) caps how many
+open retiradas a user may have. The check runs inside the transaction *after* locking the
+user's own row:
 
-CREATE TABLE devolucoes (
-  id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  book_id      BIGINT NOT NULL REFERENCES books(id),
-  devolvido_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+```php
+User::whereKey($request->user()->id)->lockForUpdate()->first();
+$emMaos = LivroRetirada::where('user_id', ...)->emAberto()->count();
 ```
 
-- `books.status` is `'disponível'` or `'indisponível'`
-- `retiradas.user_id` links each withdrawal to the Supabase Auth user
-- State-changing operations update `books.status` first, then insert; on insert failure the status is manually rolled back
+That lock is the whole point. Two simultaneous requests for *different* books lock
+*different* `livros` rows, so without serialising on the user they would both pass the
+count and the person would end up holding two. Exceeding the limit returns 409
+`LIMITE_ATINGIDO`. The limit is checked before availability, so "you already have a book"
+wins over "this one is taken" — it is the more actionable message.
 
----
+`src/app/page.tsx` mirrors the number in `LIMITE_POR_PESSOA`; the modal greys out "Retirar"
+and explains why. **Keep the two constants in sync** — the client copy is only there to
+avoid a pointless round-trip, the server is what enforces it.
 
-### Lib files
+`GET /api/livros` now returns a `disponivel` boolean per book, which drives three things:
+the "Retirado" badge on the card, the disabled "Indisponível" button in the modal, and the
+"2 de 3 livros disponíveis" count in the section header.
 
-| File | Purpose |
+> **The catalogue proxy must not cache.** `src/app/api/livros/route.ts` uses
+> `cache: 'no-store'` on purpose. It used to hold `next: { revalidate: 60 }`, which would
+> now show a just-retired book as available for up to a minute. Upstream caches with a
+> version key (`Livro::versaoCache()`) that a retirada bumps, so freshness is handled
+> there — a second layer here only adds staleness.
+
+#### Returns
+
+Implemented. `LivroController::devolucao` (added by us in the `Sistema-Quality` repo)
+enforces ownership **in the query, not in a follow-up `if`**:
+
+```php
+$aberta = LivroRetirada::where('livro_id', $exemplar->id)
+    ->where('user_id', $request->user()->id)
+    ->emAberto()
+    ->latest('retirado_em')
+    ->first();
+```
+
+No open row for *this* user means the return does not happen — whether the book is free or
+held by somebody else. Both cases return the same `RETIRADA_NAO_ENCONTRADA`, deliberately,
+so the endpoint cannot be used to discover who holds a book. The whole thing runs inside
+`DB::transaction` with `lockForUpdate()`, mirroring `retirada()`.
+
+`GET /api/v1/minhas-retiradas` lists what the signed-in user currently holds. The app needs
+it because `GET /api/livros` is public and never says who holds a book — without it the UI
+knows a book is unavailable but not whether *you* are the one holding it.
+
+Those two feed one contextual button in `LivroModal`:
+
+| State | Button |
 |---|---|
-| `src/lib/db.ts` | Supabase service-role client + `Book`, `Retirada`, `Devolucao` types |
-| `src/lib/supabase-browser.ts` | Browser Supabase client (anon key) |
-| `src/lib/supabase-server.ts` | `getSessionUser()` — reads session from cookies in API routes |
-| `src/lib/zapi.ts` | `sendWhatsApp(phone, message)` — fire-and-forget WhatsApp notification via ZAPI |
+| `disponivel` | **Retirar** (blue) |
+| held by you | **Devolver** (amber) |
+| held by someone else | Indisponível, disabled |
+
+The card in `AcervoGrid` matches: an amber "Com você" strip when it is yours, a grey
+"Retirado" one otherwise.
+
+> **Not handled: forced returns.** If a member leaves the club or loses a book, the copy is
+> stuck — only the holder can return it. An admin route or an artisan command would fix it.
 
 ---
 
-### API routes
+### History
 
-All routes are under `src/app/api/` and use Route Handlers (no Express layer).
+This app previously had Supabase (auth + a `books`/`retiradas`/`devolucoes`/`sugestoes`
+schema) and ZAPI WhatsApp notifications, covering withdrawals, returns, suggestions and
+a login flow. The Supabase project was deleted upstream — its host stopped resolving in
+DNS — so all of it was removed on 2026-08-20. The code is still in git history at commit
+`c820377` if any of it needs to come back.
 
-| Route | Methods | Auth required | Purpose |
-|---|---|---|---|
-| `/api/books` | GET, POST | No | List / create books |
-| `/api/books/[id]` | PATCH, DELETE | No | Edit / delete a book |
-| `/api/retiradas` | GET, POST | POST: yes | List all / register a withdrawal |
-| `/api/retiradas/minhas` | GET | Yes | Books currently withdrawn by the logged-in user |
-| `/api/devolucoes` | GET, POST | POST: yes | List all / register a return |
-| `/api/auth` | POST | No | Validates `ADMIN_PASSWORD` for the deletion modal |
-| `/api/auth/callback` | GET | No | Supabase email-confirmation code exchange |
-
-**POST `/api/retiradas`** reads `full_name` and `telefone` from `user.user_metadata`, stores them in `retiradas`, sets the book to `indisponível`, and fires a WhatsApp notification via `sendWhatsApp` (non-blocking).
-
-**POST `/api/devolucoes`** verifies the most recent `retiradas` row for the book belongs to the requesting user (`user_id` match) before allowing the return.
-
----
-
-### Pages & components
-
-`src/app/layout.tsx` renders `<Header>` globally.
-
-#### Pages
-
-| Route | Access | What it shows |
-|---|---|---|
-| `/login` | Public | Email + password login form |
-| `/cadastro` | Public | Registration form (name, phone, email, password) — auto-login on success |
-| `/` | Auth | Stat cards + searchable book table + withdraw/return modals |
-| `/perfil` | Auth | Edit own name and phone (Supabase Auth user metadata) |
-| `/cadastrar?id=X` | Auth | Create (no `id`) or edit (with `id`) a book |
-| `/retiradas` | Auth | Full withdrawal history table |
-| `/devolucoes` | Auth | Full return history table |
-| `/excluir` | Auth | Delete a book (requires `ADMIN_PASSWORD` confirmation) |
-
-#### Key components
-
-- **`Header`** — shows "Acervo", "Meu perfil", and "Sair" nav when authenticated; hides nav on `/login` and `/cadastro`.
-- **`BookTable`** — renders the catalogue; accepts optional `onWithdraw` prop which adds a "Retirar" button for `disponível` books. The home page filters this list client-side via a real-time search input.
-- **`WithdrawModal`** — confirmation dialog (no input fields); POSTs `{ book_id }` to `/api/retiradas`; user identity comes from the session.
-- **`ReturnModal`** — select from books the current user has withdrawn (`/api/retiradas/minhas`); POSTs to `/api/devolucoes`.
-- **`DeleteModal`** — asks for `ADMIN_PASSWORD` before calling DELETE `/api/books/[id]`.
-- **`BookForm`** — shared create/edit form used by `/cadastrar`.
-
----
-
-### ZAPI integration
-
-`src/lib/zapi.ts` sends WhatsApp messages via ZAPI. Called after a successful withdrawal with a personalised message. Errors are logged to the server console but never propagate to the client.
-
-Phone number is automatically prefixed with `55` (Brazil country code) if not already present.
+Re-adding withdrawals means either the Laravel API growing those endpoints, or a new
+persistence layer here. Note the old ids do not carry over: `retiradas.book_id` pointed
+at Supabase's `books` table, which is unrelated to the catalogue ids the Laravel API
+returns.

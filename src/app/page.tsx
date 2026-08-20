@@ -1,149 +1,118 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import BookTable from '@/components/BookTable';
-import WithdrawModal from '@/components/WithdrawModal';
-import ReturnModal from '@/components/ReturnModal';
-import SugestaoModal from '@/components/SugestaoModal';
-import type { Book } from '@/lib/db';
+import AcervoGrid from '@/components/AcervoGrid';
+import LivroModal from '@/components/LivroModal';
+import { useUsuario } from '@/components/SessaoProvider';
+import { buscarMeusLivros } from '@/lib/auth';
+import { normalizar, type Livro, type LivrosResponse } from '@/lib/livros';
+
+/** Mesmo limite aplicado no servidor (`LivroController::LIMITE_POR_PESSOA`). */
+const LIMITE_POR_PESSOA = 1;
 
 export default function Home() {
-  const [books, setBooks] = useState<Book[]>([]);
-  const [myBorrowedBooks, setMyBorrowedBooks] = useState<Book[]>([]);
+  const [livros, setLivros] = useState<Livro[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [withdrawingBook, setWithdrawingBook] = useState<Book | null>(null);
-  const [returnOpen, setReturnOpen] = useState(false);
-  const [sugestaoOpen, setSugestaoOpen] = useState(false);
+  const [selecionado, setSelecionado] = useState<Livro | null>(null);
   const [search, setSearch] = useState('');
+  const [meusLivros, setMeusLivros] = useState<Set<number>>(new Set());
+  const { usuario } = useUsuario();
 
-  async function fetchBooks() {
+  async function fetchAcervo() {
     try {
-      const [booksRes, minhasRes] = await Promise.all([
-        fetch('/api/books'),
-        fetch('/api/retiradas/minhas'),
-      ]);
-      if (!booksRes.ok) throw new Error(`Erro ${booksRes.status}: ${booksRes.statusText}`);
-      const [booksData, minhasData] = await Promise.all([booksRes.json(), minhasRes.json()]);
-      setBooks(booksData);
-      setMyBorrowedBooks(Array.isArray(minhasData) ? minhasData : []);
+      const res = await fetch('/api/livros');
+      const payload: LivrosResponse = await res.json();
+      if (payload.error) throw new Error(payload.error);
+      setLivros(payload.data);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar livros.');
+      setError(err instanceof Error ? err.message : 'Erro ao carregar o acervo.');
     } finally {
       setLoading(false);
     }
   }
 
-  useEffect(() => { fetchBooks(); }, []);
+  useEffect(() => {
+    fetchAcervo();
+  }, []);
 
-  async function handleReturn(bookId: number) {
-    await fetch('/api/devolucoes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ book_id: bookId }),
-    });
-    fetchBooks();
+  // Quem está com o quê depende da sessão: recarrega quando ela muda. Sem sessão a
+  // rota devolve lista vazia sem sair do servidor, então não precisa de guarda aqui
+  // — e assim o logout limpa o estado pelo mesmo caminho.
+  useEffect(() => {
+    buscarMeusLivros().then(setMeusLivros);
+  }, [usuario]);
+
+  /** Após retirar ou devolver, acervo e "meus livros" mudam juntos. */
+  function atualizar() {
+    fetchAcervo();
+    buscarMeusLivros().then(setMeusLivros);
   }
 
-  async function handleWithdraw(bookId: number) {
-    await fetch('/api/retiradas', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ book_id: bookId }),
-    });
-    fetchBooks();
-  }
-
-  const available = books.filter((b) => b.status === 'disponível').length;
-  const unavailable = books.length - available;
-
-  const filteredBooks = search.trim()
-    ? books.filter((b) => b.name.toLowerCase().includes(search.toLowerCase()))
-    : books;
+  const termo = normalizar(search.trim());
+  const livrosFiltrados = termo
+    ? livros.filter((l) =>
+        [l.titulo, l.escritor, l.categoria, l.disponibilizado_por].some(
+          (campo) => campo && normalizar(campo).includes(termo)
+        )
+      )
+    : livros;
 
   return (
     <main className="flex-1 bg-gray-100">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-6">
-        <div className="grid grid-cols-3 gap-4">
-          <StatCard label="Total" value={books.length} />
-          <StatCard label="Disponíveis" value={available} color="bg-green-50" textColor="text-green-700" />
-          <StatCard label="Indisponíveis" value={unavailable} color="bg-red-50" textColor="text-red-700" />
-        </div>
-
-        <section className="bg-gray-50 rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-4">
-            <h2 className="text-base font-semibold text-amber-900 shrink-0">Acervo</h2>
+      <div className="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-6">
+        <section className="overflow-hidden rounded-2xl border border-gray-100 bg-gray-50 shadow-sm">
+          <div className="flex flex-col gap-3 border-b border-gray-100 px-6 py-4 sm:flex-row sm:items-center sm:gap-4">
+            <div className="shrink-0">
+              <h2 className="text-base font-semibold text-amber-900">Acervo</h2>
+              <p className="text-xs text-gray-500">
+                {loading ? 'Carregando...' : resumoAcervo(livros)}
+              </p>
+            </div>
             <input
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Pesquisar por título..."
-              className="w-full max-w-sm rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-black placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-400"
+              placeholder="Pesquisar por título, autor ou categoria..."
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-black placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-400 sm:ml-auto sm:max-w-sm"
             />
           </div>
-          {loading ? (
-            <p className="text-center text-gray-400 py-12 text-sm">Carregando...</p>
-          ) : error ? (
-            <p className="text-center text-red-500 py-12 text-sm">{error}</p>
-          ) : (
-            <BookTable books={filteredBooks} onWithdraw={setWithdrawingBook} />
-          )}
+
+          <div className="p-4 sm:p-6">
+            {loading ? (
+              <p className="py-12 text-center text-sm text-gray-400">Carregando...</p>
+            ) : error ? (
+              <p className="py-12 text-center text-sm text-red-500">{error}</p>
+            ) : (
+              <AcervoGrid
+                livros={livrosFiltrados}
+                meusLivros={meusLivros}
+                onSelect={setSelecionado}
+              />
+            )}
+          </div>
         </section>
       </div>
 
-      {/* Botões flutuantes */}
-      <div className="fixed bottom-6 right-6 flex flex-col items-end gap-3">
-        <button
-          onClick={() => setSugestaoOpen(true)}
-          className="flex items-center gap-2 rounded-full bg-amber-700 px-5 py-3 text-sm font-medium text-white shadow-lg hover:bg-amber-600 active:scale-95 transition-all"
-        >
-          <span className="text-base leading-none">💡</span>
-          Sugerir livro
-        </button>
-        <button
-          onClick={() => setReturnOpen(true)}
-          className="flex items-center gap-2 rounded-full bg-blue-900 px-5 py-3 text-sm font-medium text-white shadow-lg hover:bg-blue-800 active:scale-95 transition-all"
-        >
-          <span className="text-base leading-none">↩</span>
-          Devolver livro
-        </button>
-      </div>
-
-      <WithdrawModal
-        book={withdrawingBook}
-        onConfirm={handleWithdraw}
-        onClose={() => setWithdrawingBook(null)}
-      />
-      <ReturnModal
-        open={returnOpen}
-        myBorrowedBooks={myBorrowedBooks}
-        onConfirm={handleReturn}
-        onClose={() => setReturnOpen(false)}
-      />
-      <SugestaoModal
-        open={sugestaoOpen}
-        onClose={() => setSugestaoOpen(false)}
+      <LivroModal
+        livro={selecionado}
+        onClose={() => setSelecionado(null)}
+        meu={selecionado ? meusLivros.has(selecionado.id) : false}
+        bloqueadoPorLimite={meusLivros.size >= LIMITE_POR_PESSOA}
+        onMudou={atualizar}
       />
     </main>
   );
 }
 
-function StatCard({
-  label,
-  value,
-  color = 'bg-gray-50',
-  textColor = 'text-amber-900',
-}: {
-  label: string;
-  value: number;
-  color?: string;
-  textColor?: string;
-}) {
-  return (
-    <div className={`${color} rounded-2xl border border-gray-100 shadow-sm px-5 py-4`}>
-      <p className="text-sm text-gray-500">{label}</p>
-      <p className={`text-3xl font-bold mt-1 ${textColor}`}>{value}</p>
-    </div>
-  );
+/** "2 de 3 livros disponíveis para retirada" — a contagem antiga somava tudo. */
+function resumoAcervo(livros: Livro[]): string {
+  const total = livros.length;
+  const disponiveis = livros.filter((l) => l.disponivel).length;
+  if (total === 0) return 'Nenhum livro no acervo';
+  if (disponiveis === total) {
+    return `${total} ${total === 1 ? 'livro disponível' : 'livros disponíveis'} para retirada`;
+  }
+  return `${disponiveis} de ${total} livros disponíveis para retirada`;
 }
