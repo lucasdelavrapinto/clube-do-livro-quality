@@ -86,6 +86,7 @@ Defined in `.env.local` (see `.env.example`):
 | `src/app/api/livros/route.ts` | Server-side proxy to the Laravel API |
 | `src/lib/livros.ts` | `Livro`/`LivrosResponse` types + `normalizar()` |
 | `src/components/AcervoGrid.tsx` | Cover-card grid; also exports `Capa` |
+| `src/components/CategoriaFiltro.tsx` | Category chip row above the grid; also exports `SEM_CATEGORIA` |
 | `src/components/LivroModal.tsx` | Book detail dialog |
 | `src/components/Header.tsx` | Auth-aware header: greets the signed-in user + "Sair", or "Login / Cadastrar" |
 | `src/lib/auth.ts` | Auth types, error-envelope parsing, and the still-stubbed `retirarLivro()` |
@@ -104,12 +105,24 @@ forwards `search`/`categoria`/`per_page`/`page`, caches the upstream response fo
 and converts any upstream failure into `{ data: [], meta: { total: 0 }, error: "..." }`
 with status 502, so the page always has a shape it can render.
 
-#### Search
+#### Search and category filter
 
 Filtering happens client-side over the already-loaded list, across título, escritor,
 categoria and disponibilizado_por. `normalizar()` strips diacritics so `financas`
 matches `Finanças`. The proxy also forwards `?search=` upstream, which is unused by
 the UI today but available if the catalogue grows enough to need server-side paging.
+
+`CategoriaFiltro` renders a chip per category directly above the grid — there is no
+category endpoint, so the list is derived from the loaded books (with a count each,
+alphabetical by `pt-BR`). Books whose `categoria` is null group under a trailing
+"Sem categoria" chip, keyed by the `SEM_CATEGORIA` sentinel so they stay reachable.
+The chip filter and the search box narrow the list together (AND). The row hides
+itself when there are fewer than two categories, and it wraps onto several lines from
+`sm` up — with ~11 categories the horizontal scroll it uses on mobile would hide half
+of them on a wide screen.
+
+The "20 de 21 livros disponíveis" line in the header deliberately keeps counting the
+whole acervo, not the filtered slice: it describes the club, not the current view.
 
 #### Covers
 

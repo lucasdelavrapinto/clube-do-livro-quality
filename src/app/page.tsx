@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import AcervoGrid from '@/components/AcervoGrid';
+import CategoriaFiltro, { SEM_CATEGORIA } from '@/components/CategoriaFiltro';
 import LivroModal from '@/components/LivroModal';
 import { useUsuario } from '@/components/SessaoProvider';
 import { buscarMeusLivros } from '@/lib/auth';
@@ -16,6 +17,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [selecionado, setSelecionado] = useState<Livro | null>(null);
   const [search, setSearch] = useState('');
+  const [categoria, setCategoria] = useState<string | null>(null);
   const [meusLivros, setMeusLivros] = useState<Set<number>>(new Set());
   const { usuario } = useUsuario();
 
@@ -51,13 +53,13 @@ export default function Home() {
   }
 
   const termo = normalizar(search.trim());
-  const livrosFiltrados = termo
-    ? livros.filter((l) =>
-        [l.titulo, l.escritor, l.categoria, l.disponibilizado_por].some(
-          (campo) => campo && normalizar(campo).includes(termo)
-        )
-      )
-    : livros;
+  const livrosFiltrados = livros.filter((l) => {
+    if (categoria !== null && (l.categoria ?? SEM_CATEGORIA) !== categoria) return false;
+    if (!termo) return true;
+    return [l.titulo, l.escritor, l.categoria, l.disponibilizado_por].some(
+      (campo) => campo && normalizar(campo).includes(termo)
+    );
+  });
 
   return (
     <main className="flex-1 bg-gray-100">
@@ -78,6 +80,14 @@ export default function Home() {
               className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-black placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-400 sm:ml-auto sm:max-w-sm"
             />
           </div>
+
+          {!loading && !error && (
+            <CategoriaFiltro
+              livros={livros}
+              selecionada={categoria}
+              onChange={setCategoria}
+            />
+          )}
 
           <div className="p-4 sm:p-6">
             {loading ? (
