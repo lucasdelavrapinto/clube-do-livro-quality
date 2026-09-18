@@ -93,6 +93,25 @@ export async function autenticar(caminho: 'login' | 'register', corpo: unknown) 
 }
 
 /**
+ * Repassa o "esqueci minha senha" e a troca de senha. Nenhum dos dois mexe na
+ * sessão: a resposta da API volta como veio, inclusive os erros de validação.
+ */
+export async function repassar(caminho: 'forgot-password' | 'reset-password', corpo: unknown) {
+  try {
+    const upstream = await fetch(urlAuth(caminho), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(corpo),
+      cache: 'no-store',
+    });
+
+    return NextResponse.json(await upstream.json(), { status: upstream.status });
+  } catch {
+    return falhaUpstream('Não foi possível falar com o servidor de autenticação.');
+  }
+}
+
+/**
  * Retirada e devolução só diferem no verbo final da URL, então dividem o mesmo
  * caminho: valida o id, anexa o Bearer do cookie e repassa a resposta como veio
  * — inclusive os 409 (`LIVRO_INDISPONIVEL` e `RETIRADA_NAO_ENCONTRADA`).

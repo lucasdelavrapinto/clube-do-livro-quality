@@ -64,6 +64,12 @@ export default function LoginPage() {
             placeholder="••••••••"
           />
 
+          <div className="-mt-2 text-right">
+            <Link href="/esqueci-senha" className="text-xs text-amber-700 hover:underline">
+              Esqueci minha senha
+            </Link>
+          </div>
+
           {erro && (
             <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{erro}</p>
           )}

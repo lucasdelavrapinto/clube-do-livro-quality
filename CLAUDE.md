@@ -95,6 +95,8 @@ Defined in `.env.local` (see `.env.example`):
 | `src/lib/telefone.ts` | Brazilian phone mask + DDD/mobile validation |
 | `src/app/login/page.tsx` | Email + password form. Honours `?next=` (internal paths only) |
 | `src/app/cadastro/page.tsx` | Registration form (nome, telefone, email, senha) |
+| `src/app/esqueci-senha/page.tsx` | "Esqueci minha senha": asks for the email, always shows the same confirmation |
+| `src/app/redefinir-senha/page.tsx` | Target of the reset email's link (`?token=&email=`): new password, then signs in |
 
 #### Why the proxy route exists
 
@@ -144,6 +146,8 @@ token in an `httpOnly` cookie named `clube_token`.
 | `POST /api/auth/login` | `POST /api/v1/auth/login` | Accepts `MOTORISTA` or `LIVROS` |
 | `GET /api/auth/me` | `GET /api/v1/auth/me` | Returns `data: null` when signed out |
 | `POST /api/auth/logout` | `POST /api/v1/auth/logout` | Revokes the token, clears the cookie |
+| `POST /api/auth/forgot-password` | `POST /api/v1/auth/forgot-password` | Always 200 — never reveals whether the email exists |
+| `POST /api/auth/reset-password` | `POST /api/v1/auth/reset-password` | Does not sign in; 422 on `token` when the link is bad |
 | `POST /api/retiradas` | `POST /api/v1/livros/{id}/retirada` | Body `{ livro_id }`; 409 `LIVRO_INDISPONIVEL` |
 | `POST /api/devolucoes` | `POST /api/v1/livros/{id}/devolucao` | Body `{ livro_id }`; 409 `RETIRADA_NAO_ENCONTRADA` |
 | `GET /api/minhas-retiradas` | `GET /api/v1/minhas-retiradas` | Empty list when signed out — no upstream call |
@@ -159,10 +163,31 @@ so `error.fields` is available to highlight the offending input.
 Two constraints worth remembering:
 
 - **Passwords must be at least 8 characters.** The server uses `Rules\Password::defaults()`,
-  which is Laravel's `min(8)`. The cadastro form validates the same number — keep them in
+  which is Laravel's `min(8)`. The cadastro and redefinir-senha forms validate the same number — keep them in
   sync if the server rule changes.
 - **Phone is sent as typed.** The server strips non-digits before validating, so the mask
   `(11) 91234-5678` is accepted; the column is `string('phone', 11)`.
+
+#### Password reset
+
+"Esqueci minha senha" on the login page leads to `/esqueci-senha`, which posts the email
+to `forgot-password`. Laravel answers the same 200 whether or not the account exists, so the
+confirmation screen is worded the same way — don't make it say "email sent". It only sends
+the link to users who could log in through the API (active, role `MOTORISTA` or `LIVROS`).
+
+The email is built by `Sistema-Quality` (`RedefinicaoSenhaClubeMail`) and links to
+**this** app: `{CLUBE_LIVRO_URL}/redefinir-senha?token=...&email=...`. `CLUBE_LIVRO_URL`
+is a Sistema-Quality env var defaulting to `https://clubedolivro.qualitytransportes.com.br`;
+locally it must be `http://localhost:3000` in Sistema-Quality's `.env`. **Renaming the
+`/redefinir-senha` route breaks every link already in someone's inbox** — change the
+Mailable in the same deploy. The link lasts 60 minutes (`auth.passwords.users.expire`)
+and is single-use.
+
+`reset-password` only changes the password — and revokes every Sanctum token the user
+had. The page then calls `entrar()` with the new password so the person lands signed in;
+if that login is refused (e.g. an account without an API role that used a link from the
+portal's own reset), it falls back to a "Senha redefinida — Entrar" screen. The reset
+itself already happened either way.
 
 #### Withdrawals
 

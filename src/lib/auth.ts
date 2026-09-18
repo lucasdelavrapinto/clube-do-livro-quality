@@ -32,11 +32,7 @@ export function extrairErro(payload: unknown, padrao: string): ResultadoAuth {
   };
 }
 
-async function acaoNoLivro(
-  rota: string,
-  livroId: number,
-  padrao: string
-): Promise<ResultadoAuth> {
+async function postar(rota: string, corpo: unknown, padrao: string): Promise<ResultadoAuth> {
   let res: Response;
   let payload: unknown;
 
@@ -44,7 +40,7 @@ async function acaoNoLivro(
     res = await fetch(rota, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ livro_id: livroId }),
+      body: JSON.stringify(corpo),
     });
     payload = await res.json();
   } catch {
@@ -57,12 +53,41 @@ async function acaoNoLivro(
 
 /** Registra a retirada do exemplar para o usuário da sessão atual. */
 export function retirarLivro(livroId: number): Promise<ResultadoAuth> {
-  return acaoNoLivro('/api/retiradas', livroId, 'Não foi possível concluir a retirada.');
+  return postar('/api/retiradas', { livro_id: livroId }, 'Não foi possível concluir a retirada.');
 }
 
 /** Devolve o exemplar. O servidor recusa se ele não estiver com quem pediu. */
 export function devolverLivro(livroId: number): Promise<ResultadoAuth> {
-  return acaoNoLivro('/api/devolucoes', livroId, 'Não foi possível concluir a devolução.');
+  return postar('/api/devolucoes', { livro_id: livroId }, 'Não foi possível concluir a devolução.');
+}
+
+/**
+ * Pede o e-mail com o link de redefinição. O servidor responde igual exista a
+ * conta ou não, então `ok` só quer dizer que o pedido foi aceito.
+ */
+export function pedirRedefinicaoSenha(email: string): Promise<ResultadoAuth> {
+  return postar('/api/auth/forgot-password', { email }, 'Não foi possível enviar o e-mail.');
+}
+
+export interface DadosRedefinicao {
+  token: string;
+  email: string;
+  senha: string;
+  confirmacao: string;
+}
+
+/** Troca a senha com o token do link. Não abre sessão — quem chama decide se entra. */
+export function redefinirSenha(dados: DadosRedefinicao): Promise<ResultadoAuth> {
+  return postar(
+    '/api/auth/reset-password',
+    {
+      token: dados.token,
+      email: dados.email,
+      password: dados.senha,
+      password_confirmation: dados.confirmacao,
+    },
+    'Não foi possível redefinir a senha.'
+  );
 }
 
 /** Ids dos livros que estão com o usuário agora. Lista vazia quando não há sessão. */
