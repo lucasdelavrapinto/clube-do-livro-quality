@@ -81,12 +81,30 @@ qualquer falha do upstream em um 502 com corpo previsível.
 
 ## Deploy
 
-Compatível com qualquer plataforma que suporte Next.js.
+Servido em `clubedolivro.qualitytransportes.com.br`, como processo Node standalone atrás
+do Apache (porta `3002`, serviço systemd `clube-do-livro.service`).
 
-**Configure `LIVROS_API_URL` na plataforma.** Sem ela o app cai no padrão
-`http://127.0.0.1:8001/api/livros`, que não existe em produção. A API do Laravel também
+**Configure `LIVROS_API_URL` e `API_V1_URL` no host.** Sem elas o app cai no padrão
+`http://127.0.0.1:8001/...`, que não existe em produção. A API do Laravel também
 precisa estar acessível publicamente a partir do servidor onde este app roda — e as
 capas (`imagem_url`) precisam ser alcançáveis pelo browser de quem visita.
+
+Depois de alterações no código, repita os passos abaixo — pular o último é o motivo
+mais comum de uma atualização não aparecer no site:
+
+```bash
+npm run build
+
+# modo standalone não inclui esses diretórios; copiar à mão
+cp -r public .next/standalone/
+cp -r .next/static .next/standalone/.next/
+cp .env .next/standalone/.env
+
+sudo systemctl restart clube-do-livro.service
+```
+
+O servidor standalone carrega o código em memória na inicialização — sem o `restart`,
+ele continua servindo a versão antiga mesmo com um build novo em disco.
 
 ---
 
